@@ -9,15 +9,23 @@
 import UIKit
 import AlamofireImage
 
-class PhotosViewController: UIViewController, UITableViewDataSource, UITableViewDelegate {
+class PhotosViewController: UIViewController, UITableViewDataSource, UITableViewDelegate, UIScrollViewDelegate {
     
     @IBOutlet weak var tableView: UITableView!
     
     var posts: [[String: Any]] = []
+    var isMoreDataLoading = false
     
     override func viewDidLoad() {
         super.viewDidLoad()
-        /*
+        
+        // Initialize a UIRefreshControl
+        let refreshControl = UIRefreshControl()
+        refreshControlAction(refreshControl)
+        refreshControl.addTarget(self, action: #selector(refreshControlAction(_:)), for: UIControlEvents.valueChanged)
+        // add refresh control to table view
+        tableView.insertSubview(refreshControl, at: 0)
+        
         tableView.delegate = self
         tableView.dataSource = self
         
@@ -29,69 +37,43 @@ class PhotosViewController: UIViewController, UITableViewDataSource, UITableView
                 print(error.localizedDescription)
             } else if let data = data,
                 let dataDictionary = try! JSONSerialization.jsonObject(with: data, options: []) as? [String: Any] {
-                print(dataDictionary)
-                
+                //print(dataDictionary)
                 // TODO: Get the posts and store in posts property
                 // Get the dictionary from the response key
                 let responseDictionary = dataDictionary["response"] as! [String: Any]
                 // Store the returned array of dictionaries in our posts property
                 self.posts = responseDictionary["posts"] as! [[String: Any]]
-                
                 // TODO: Reload the table view
                 self.tableView.reloadData()
-                
             }
         }
         task.resume()
         // Do any additional setup after loading the view.
- */
-        
-        // Initialize a UIRefreshControl
-        let refreshControl = UIRefreshControl()
-        
-        refreshControlAction(refreshControl)            //there is a delay and idk if should just uncomment above and comment this or just leave as is
-        
-        refreshControl.addTarget(self, action: #selector(refreshControlAction(_:)), for: UIControlEvents.valueChanged)
-        // add refresh control to table view
-        tableView.insertSubview(refreshControl, at: 0)
-        
-        
-        
     }
-
+    
     func refreshControlAction(_ refreshControl: UIRefreshControl) {
         
         tableView.delegate = self
         tableView.dataSource = self
         
         let url = URL(string: "https://api.tumblr.com/v2/blog/humansofnewyork.tumblr.com/posts/photo?api_key=Q6vHoaVm5L1u2ZAW1fqv3Jw48gFzYVg9P0vH0VHl3GVy6quoGV")!
-        let session = URLSession(configuration: .default,    delegate: nil, delegateQueue: OperationQueue.main)
+        let session = URLSession(configuration: .default, delegate: nil, delegateQueue: OperationQueue.main)
         session.configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
-        let task = session.dataTask(with: url) { (data, response, error) in
+        let request = URLRequest(url: url, cachePolicy: . reloadIgnoringLocalCacheData, timeoutInterval: 10)                    //from refreshControlAction
+        let task = session.dataTask(with: request) { (data, response, error) in
             if let error = error {
                 print(error.localizedDescription)
             } else if let data = data,
                 let dataDictionary = try! JSONSerialization.jsonObject(with: data, options: []) as? [String: Any] {
-                print(dataDictionary)
-                
-                // TODO: Get the posts and store in posts property
-                // Get the dictionary from the response key
-                let responseDictionary = dataDictionary["response"] as! [String: Any]
-                // Store the returned array of dictionaries in our posts property
-                self.posts = responseDictionary["posts"] as! [[String: Any]]
-                
+                //print(dataDictionary)
                 // Reload the tableView now that there is new data
                 self.tableView.reloadData()
-                
                 // Tell the refreshControl to stop spinning
                 refreshControl.endRefreshing()
             }
         }
         task.resume()
     }
-
-    
-    
     
     override func didReceiveMemoryWarning() {
         super.didReceiveMemoryWarning()
@@ -99,7 +81,7 @@ class PhotosViewController: UIViewController, UITableViewDataSource, UITableView
     }
     
     // MARK: - Navigation
-
+    
     // In a storyboard-based application, you will often want to do a little preparation before navigation
     override func prepare(for segue: UIStoryboardSegue, sender: Any?) {
         // Get the new view controller using segue.destinationViewController.
@@ -137,13 +119,59 @@ class PhotosViewController: UIViewController, UITableViewDataSource, UITableView
             let urlString = originalSize["url"] as! String
             // 4.
             let url = URL(string: urlString)
-
-           //cell.imageView?.af_setImage(withURL: url!)
+            
+            //cell.imageView?.af_setImage(withURL: url!)
             cell.NOTimageView.af_setImage(withURL: url!)
         }
         return cell
     }
     
+    func loadMoreData() {
+        let url = URL(string: "https://api.tumblr.com/v2/blog/humansofnewyork.tumblr.com/posts/photo?api_key=Q6vHoaVm5L1u2ZAW1fqv3Jw48gFzYVg9P0vH0VHl3GVy6quoGV&offset=\(posts.count)")!
+        //&offset=\(posts.count)            = key word offset
+        let request = URLRequest(url: url, cachePolicy: . reloadIgnoringLocalCacheData, timeoutInterval: 10)                    //from refreshControlAction
+        let session = URLSession(configuration: .default, delegate: nil, delegateQueue: OperationQueue.main)
+        //session.configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+        let task: URLSessionDataTask = session.dataTask(with: request, completionHandler: { (data, response, error) in
+            if let error = error {
+                print(error.localizedDescription)
+            } else if let data = data,
+                let dataDictionary = try! JSONSerialization.jsonObject(with: data, options: []) as? [String: Any] {
+                print(dataDictionary)
+                // TODO: Get the posts and store in posts property
+                // Get the dictionary from the response key
+                let responseDictionary = dataDictionary["response"] as! [String: Any]
+                // Store the returned array of dictionaries in our posts property
+                self.posts += responseDictionary["posts"] as! [[String: Any]]                               // += also important
+                
+                // Reload the tableView now that there is new data
+                self.tableView.reloadData()
+                
+                // Tell the refreshControl to stop spinning
+                //refreshControl.endRefreshing()
+            }
+            self.tableView.reloadData()
+            self.isMoreDataLoading = false
+        })
+        task.resume()
+    }
     
-
+    func scrollViewDidScroll(_ scrollView: UIScrollView) {
+        if (!isMoreDataLoading) {
+            // Calculate the position of one screen length before the bottom of the results
+            let scrollViewContentHeight = tableView.contentSize.height
+            let scrollOffsetThreshold = scrollViewContentHeight - tableView.bounds.size.height
+            
+            // When the user has scrolled past the threshold, start requesting
+            if(scrollView.contentOffset.y > scrollOffsetThreshold && tableView.isDragging) {
+                
+                isMoreDataLoading = true
+                print(" T H I  S I S H A P P E N I N G")
+                // Code to load more results
+                loadMoreData()
+            }
+        }
+    }
+    
+    
 }

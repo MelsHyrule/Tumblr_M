@@ -18,6 +18,7 @@ class PhotoDetailsViewController: UIViewController {
     
     override func viewDidLoad() {
         super.viewDidLoad()
+        
         if let post = post {
             captionLabel.text = post["caption"] as? String
         }
@@ -28,6 +29,9 @@ class PhotoDetailsViewController: UIViewController {
             let url = URL(string: urlString)
             detailedImageView.af_setImage(withURL: url!)
         }
+        
+
+        
         // Do any additional setup after loading the view.
     }
 
